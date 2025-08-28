@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Boligkompis – Pitch-demo</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 20px; background: #f9fafb; }
+    h1 { margin-bottom: 10px; }
+    .card { background: #fff; padding: 16px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px; }
+    button { padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-secondary { background: #e5e7eb; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <h1>Boligkompis Pitch-demo</h1>
+  <p>Logg inn med brukernavn: <b>testbrukerboligkompis</b> (passord valgfritt i demo)</p>
+
+  <div id="login" class="card">
+    <input id="username" placeholder="Brukernavn" />
+    <input id="password" type="password" placeholder="Passord" />
+    <button class="btn-primary" onclick="login()">Logg inn</button>
+    <p id="loginMsg" style="color:red"></p>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="card">
+      <h2>Rapporter</h2>
+      <button class="btn-secondary" onclick="downloadPdf()">Last ned PDF</button>
+      <button class="btn-primary" onclick="simulateUpload()">Last opp (simulert)</button>
+    </div>
+  </div>
+
+  <script>
+    const { jsPDF } = window.jspdf;
+
+    function login() {
+      const u = document.getElementById('username').value.trim();
+      if (u !== 'testbrukerboligkompis') {
+        document.getElementById(

@@ -3,40 +3,182 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Boligkompis – Pitch-demo</title>
+  <title>Boligkompis – Rapportvisning</title>
   <style>
-    body { font-family: sans-serif; margin: 0; padding: 20px; background: #f9fafb; }
-    h1 { margin-bottom: 10px; }
-    .card { background: #fff; padding: 16px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px; }
-    button { padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; }
-    .btn-primary { background: #2563eb; color: white; }
-    .btn-secondary { background: #e5e7eb; }
+    :root{--border:#e5e7eb;--muted:#6b7280;--brand:#2563eb}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0}
+    header{border-bottom:1px solid var(--border);padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+    main{max-width:980px;margin:20px auto;padding:0 16px}
+    .grid{display:grid;gap:12px}
+    .cols-2{grid-template-columns:1fr 1fr}
+    @media(max-width:800px){.cols-2{grid-template-columns:1fr}}
+    textarea,input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font:inherit}
+    button{appearance:none;border:0;background:var(--brand);color:#fff;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}
+    .secondary{background:#f3f4f6;color:#111;border:1px solid var(--border)}
+    .card{border:1px solid var(--border);border-radius:12px;padding:14px}
+    .muted{color:var(--muted)}
+    h1,h2{margin:.2em 0}
+    .row{display:flex;gap:8px;align-items:center}
+    .list{list-style:none;margin:0;padding-left:18px}
+    .kv{display:grid;grid-template-columns:160px 1fr;gap:6px 12px}
+    .kv b{color:#111}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
-  <h1>Boligkompis Pitch-demo</h1>
-  <p>Logg inn med brukernavn: <b>testbrukerboligkompis</b> (passord valgfritt i demo)</p>
-
-  <div id="login" class="card">
-    <input id="username" placeholder="Brukernavn" />
-    <input id="password" type="password" placeholder="Passord" />
-    <button class="btn-primary" onclick="login()">Logg inn</button>
-    <p id="loginMsg" style="color:red"></p>
+<header>
+  <strong>Boligkompis – Rapport</strong>
+  <div class="row">
+    <button id="btnDownload" class="secondary">Last ned PDF</button>
   </div>
+</header>
 
-  <div id="app" class="hidden">
-    <div class="card">
-      <h2>Rapporter</h2>
-      <button class="btn-secondary" onclick="downloadPdf()">Last ned PDF</button>
-      <button class="btn-primary" onclick="simulateUpload()">Last opp (simulert)</button>
+<main class="grid cols-2">
+  <section class="card">
+    <h2>1) Lim inn JSON fra Boligkompis</h2>
+    <p class="muted">Lim inn <code>PDF_data</code> eller <code>WEB_bundle.data</code> som GPT-en gir.</p>
+    <textarea id="jsonArea" rows="12" placeholder='{"versjon":"1.0.0","rapport":{...}}'></textarea>
+    <div class="row">
+      <button id="btnLoad">Vis rapport</button>
+      <button id="btnDemo" class="secondary">Fyll demo</button>
     </div>
-  </div>
+  </section>
 
-  <script>
-    const { jsPDF } = window.jspdf;
+  <section class="card" id="view">
+    <h2>2) Rapport</h2>
+    <div id="summary" class="muted">Ingen data ennå.</div>
+    <div id="kv" class="kv" style="margin-top:10px"></div>
+    <div style="margin-top:14px">
+      <h3>Observasjoner</h3>
+      <ul id="obs" class="list"></ul>
+    </div>
+    <div style="margin-top:14px">
+      <h3>Tiltak/Anbefalinger</h3>
+      <ul id="tiltak" class="list"></ul>
+    </div>
+  </section>
+</main>
 
-    function login() {
-      const u = document.getElementById('username').value.trim();
-      if (u !== 'testbrukerboligkompis') {
-        document.getElementById(
+<script>
+  const { jsPDF } = window.jspdf;
+  let STATE = null; // holder parsed JSON
+
+  function fillView(d) {
+    const r = d.rapport || {};
+    document.getElementById('summary').textContent =
+      (r.sammendrag?.tekst || '—') + (r.sammendrag?.konklusjon ? '  |  ' + r.sammendrag.konklusjon : '');
+
+    const f = r.forside || {};
+    const kv = document.getElementById('kv');
+    kv.innerHTML = `
+      <b>Tittel</b><div>${f.tittel || 'Boligkompis Rapport'}</div>
+      <b>Prosjektnavn</b><div>${f.prosjektnavn || ''}</div>
+      <b>Adresse</b><div>${f.adresse || ''}</div>
+      <b>Utført av</b><div>${f.utført_av || ''}</div>
+      <b>Dato</b><div>${f.dato || ''}</div>
+      <b>Rom/Etasje</b><div>${f.rom_etasj || ''}</div>
+      <b>Pris (NOK)</b><div>${typeof f.pris_nok==='number'? f.pris_nok.toLocaleString('no-NO'): (f.pris_nok||'')}</div>
+      <b>Signert av</b><div>${r.signatur?.signert_av || ''}</div>
+    `;
+
+    const obs = document.getElementById('obs');
+    obs.innerHTML = (r.observasjoner||[]).map(o => `<li>• ${o.beskrivelse || o.tekst || JSON.stringify(o)}</li>`).join('') || '<li class="muted">Ingen</li>';
+
+    const tiltak = document.getElementById('tiltak');
+    tiltak.innerHTML = (r.tiltak||[]).map(t => `<li>• ${t.beskrivelse || t.tekst || JSON.stringify(t)}</li>`).join('') || '<li class="muted">Ingen</li>';
+  }
+
+  function loadFromTextarea() {
+    try {
+      const raw = document.getElementById('jsonArea').value.trim();
+      if (!raw) { alert('Lim inn JSON først.'); return; }
+      const data = JSON.parse(raw);
+      STATE = data;
+      fillView(STATE);
+    } catch (e) {
+      alert('Ugyldig JSON: ' + e.message);
+    }
+  }
+
+  async function downloadPdf() {
+    if (!STATE?.rapport) { alert('Last inn rapportdata først.'); return; }
+    const r = STATE.rapport;
+    const f = r.forside || {};
+    const doc = new jsPDF({ unit:'pt', format:'a4' });
+    const line = (y)=>doc.line(50,y,545,y);
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(18);
+    doc.text('Boligkompis Rapport', 50, 70);
+    doc.setFont('helvetica','normal'); doc.setFontSize(12);
+    doc.text(`Prosjektnavn: ${f.prosjektnavn || ''}`, 50, 100);
+    doc.text(`Adresse: ${f.adresse || ''}`, 50, 120);
+    doc.text(`Utført av: ${f.utført_av || ''}`, 50, 140);
+    doc.text(`Dato: ${f.dato || ''}`, 50, 160);
+    doc.text(`Rom/Etasje: ${f.rom_etasj || ''}`, 50, 180);
+    const pris = typeof f.pris_nok==='number'? f.pris_nok.toLocaleString('no-NO'): (f.pris_nok||'');
+    doc.text(`Pris (NOK): ${pris}`, 50, 200);
+
+    line(215);
+    doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text('Sammendrag', 50, 240);
+    doc.setFont('helvetica','normal'); doc.setFontSize(12);
+    const sum = (r.sammendrag?.tekst || '') + (r.sammendrag?.konklusjon ? '\n\nKonklusjon: ' + r.sammendrag.konklusjon : '');
+    doc.text(doc.splitTextToSize(sum || '—', 495), 50, 265);
+
+    if (r.observasjoner?.length) {
+      doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text('Observasjoner', 50, 360);
+      doc.setFont('helvetica','normal'); doc.setFontSize(12);
+      let y = 380;
+      r.observasjoner.forEach((o,i)=>{ doc.text(`• ${o.beskrivelse || o.tekst || JSON.stringify(o)}`, 50, y); y += 18; });
+    }
+
+    if (r.tiltak?.length) {
+      doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.text('Tiltak/Anbefalinger', 50, 520);
+      doc.setFont('helvetica','normal'); doc.setFontSize(12);
+      let y = 540;
+      r.tiltak.forEach((t,i)=>{ doc.text(`• ${t.beskrivelse || t.tekst || JSON.stringify(t)}`, 50, y); y += 18; });
+    }
+
+    doc.setFontSize(10); doc.setTextColor(120);
+    doc.text('Generert lokalt – visning', 50, 810);
+    const fname = `rapport-${(f.prosjektnavn||'boligkompis').replace(/\s+/g,'_')}.pdf`;
+    doc.save(fname);
+  }
+
+  // Demo-data-knapp
+  document.getElementById('btnDemo').addEventListener('click', ()=>{
+    const demo = {
+      versjon: "1.0.0",
+      generert_tidspunkt: new Date().toISOString(),
+      språk: "nb-NO",
+      rapport: {
+        forside: {
+          tittel: "Boligkompis Rapport",
+          prosjektnavn: "El-kontroll kjøkken",
+          adresse: "Eksempelgata 12, 0123 Oslo",
+          utført_av: "Elektriker Hansen AS – Kari Hansen",
+          dato: "2024-11-02",
+          rom_etasj: "Kjøkken / 1. etasje",
+          pris_nok: 3200
+        },
+        sammendrag: {
+          tekst: "Visuell kontroll av stikk/kurser. Ingen alvorlige avvik.",
+          konklusjon: "Anbefaler komfyrvakt innen 12 mnd."
+        },
+        observasjoner: [
+          { beskrivelse: "Løst lokk på koblingsboks (lav alvorlighet)" }
+        ],
+        tiltak: [
+          { beskrivelse: "Montere komfyrvakt innen 12 mnd (anbefalt frist)" }
+        ],
+        dokumentasjon: { vedleggsliste: [] },
+        signatur: { signert_av: "testbrukerboligkompis", signert_tidspunkt: new Date().toISOString() }
+      }
+    };
+    document.getElementById('jsonArea').value = JSON.stringify(demo, null, 2);
+  });
+
+  document.getElementById('btnLoad').addEventListener('click', loadFromTextarea);
+  document.getElementById('btnDownload').addEventListener('click', downloadPdf);
+</script>
+</body>
+</html>
